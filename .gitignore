@@ -70,6 +70,17 @@ libevent_openssl.pc
 /stamp-h1
 /stamp-h2
 
+# Some of the Visual Studio files on Windows
+*.ncb
+*.suo
+*.pdb
+*.ilk
+*.idb
+*.dep
+*.intermediate.manifest
+/Release
+/Debug
+
 /include/event2/event-config.h
 /evconfig-private.h
 

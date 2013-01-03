@@ -65,6 +65,8 @@
 #endif
 #endif
 
+#define DEFAULT_HTTP_PORT   80
+
 char uri_root[512];
 
 static const struct table_entry {
@@ -165,7 +167,7 @@ send_document_cb(struct evhttp_request *req, void *arg)
 	const char *path;
 	char *decoded_path;
 	char *whole_path = NULL;
-	size_t len;
+	size_t len, pathlen;
 	int fd = -1;
 	struct stat st;
 
@@ -204,7 +206,20 @@ send_document_cb(struct evhttp_request *req, void *arg)
 		perror("malloc");
 		goto err;
 	}
-	evutil_snprintf(whole_path, len, "%s/%s", docroot, decoded_path);
+
+    if (strncmp(decoded_path, "\\", 1) == 0
+        || strncmp(decoded_path, "/", 1) == 0) {
+        evutil_snprintf(whole_path, len, "%s%s", docroot, decoded_path);
+    }
+    else {
+        evutil_snprintf(whole_path, len, "%s/%s", docroot, decoded_path);
+    }
+
+    pathlen = strlen(whole_path);
+    if ((pathlen > 0) && (strncmp(whole_path + (pathlen - 1), "\\", 1) == 0
+        || strncmp(whole_path + (pathlen - 1), "/", 1) == 0)) {
+        whole_path[pathlen - 1] = '\0';
+    }
 
 	if (stat(whole_path, &st)<0) {
 		goto err;
@@ -274,7 +289,8 @@ send_document_cb(struct evhttp_request *req, void *arg)
 #endif
 		evbuffer_add_printf(evb, "</ul></body></html>\n");
 #ifdef _WIN32
-		CloseHandle(d);
+		//CloseHandle(d);
+        FindClose(d);
 #else
 		closedir(d);
 #endif
@@ -284,7 +300,7 @@ send_document_cb(struct evhttp_request *req, void *arg)
 		/* Otherwise it's a file; add it to the buffer to get
 		 * sent via sendfile */
 		const char *type = guess_content_type(decoded_path);
-		if ((fd = open(whole_path, O_RDONLY)) < 0) {
+		if ((fd = open(whole_path, O_RDONLY | _O_BINARY)) < 0) {
 			perror("open");
 			goto err;
 		}
@@ -320,7 +336,7 @@ done:
 static void
 syntax(void)
 {
-	fprintf(stdout, "Syntax: http-server <docroot>\n");
+	fprintf(stdout, "Syntax: http-server <docroot> [<httpport>]\n");
 }
 
 int
@@ -363,8 +379,17 @@ main(int argc, char **argv)
 	 * cb.  We can also add callbacks for specific paths. */
 	evhttp_set_gencb(http, send_document_cb, argv[1]);
 
+    /* Get http port */
+    if (argc < 3) {
+        port = DEFAULT_HTTP_PORT;
+    }
+    else {
+        port = atoi(argv[2]);
+        printf("port = %d\n", port);
+    }
+
 	/* Now we tell the evhttp what port to listen on */
-	handle = evhttp_bind_socket_with_handle(http, "0.0.0.0", port);
+	handle = evhttp_bind_socket_with_handle(http, "127.0.0.1", port);
 	if (!handle) {
 		fprintf(stderr, "couldn't bind to port %d. Exiting.\n",
 		    (int)port);
